@@ -8,6 +8,13 @@ on:
         required: true
         type: string
 
+env:
+  # Configure these for your project:
+  PRODUCT_NAME: ${{ vars.RELEASE_NOTES_PRODUCT_NAME || github.event.repository.name }}
+  PRODUCT_DESCRIPTION: ${{ vars.RELEASE_NOTES_PRODUCT_DESCRIPTION || 'a software project' }}
+  FRONTEND_DIR: ${{ vars.RELEASE_NOTES_FRONTEND_DIR || '' }}
+  BACKEND_DIR: ${{ vars.RELEASE_NOTES_BACKEND_DIR || '' }}
+
 jobs:
   generate-release-notes:
     name: Generate Release Notes with Claude
@@ -79,14 +86,23 @@ jobs:
           # Get detailed changes by component
           echo "### File Changes by Component" > changes.txt
           echo "" >> changes.txt
-          echo "**Frontend:**" >> changes.txt
-          git diff ${PREVIOUS_TAG}..${CURRENT_TAG} --stat -- archon-ui-main/ | head -20 >> changes.txt
-          echo "" >> changes.txt
-          echo "**Backend:**" >> changes.txt
-          git diff ${PREVIOUS_TAG}..${CURRENT_TAG} --stat -- python/ | head -20 >> changes.txt
-          echo "" >> changes.txt
+
+          # Frontend changes (if FRONTEND_DIR is configured)
+          if [ -n "${{ env.FRONTEND_DIR }}" ]; then
+            echo "**Frontend:**" >> changes.txt
+            git diff ${PREVIOUS_TAG}..${CURRENT_TAG} --stat -- "${{ env.FRONTEND_DIR }}" | head -20 >> changes.txt
+            echo "" >> changes.txt
+          fi
+
+          # Backend changes (if BACKEND_DIR is configured)
+          if [ -n "${{ env.BACKEND_DIR }}" ]; then
+            echo "**Backend:**" >> changes.txt
+            git diff ${PREVIOUS_TAG}..${CURRENT_TAG} --stat -- "${{ env.BACKEND_DIR }}" | head -20 >> changes.txt
+            echo "" >> changes.txt
+          fi
+
           echo "**Documentation:**" >> changes.txt
-          git diff ${PREVIOUS_TAG}..${CURRENT_TAG} --stat -- '*.md' PRPs/ | head -10 >> changes.txt
+          git diff ${PREVIOUS_TAG}..${CURRENT_TAG} --stat -- '*.md' | head -10 >> changes.txt
 
       - name: Get closed PRs
         id: prs
@@ -112,10 +128,10 @@ jobs:
         id: context
         run: |
           # Create a context file with all the information
-          cat > release-context.md <<'EOF'
+          cat > release-context.md <<EOF
           # Release Notes Generation Task
 
-          You are writing release notes for Archon V2 Beta, a local-first AI knowledge management system.
+          You are writing release notes for ${{ env.PRODUCT_NAME }}, ${{ env.PRODUCT_DESCRIPTION }}.
 
           ## Release Information
 

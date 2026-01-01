@@ -5,7 +5,7 @@
 Git is available and configured. You have write access to repository contents. The GitHub CLI (`gh`) may be available and authenticated via `GH_TOKEN` - if so, use it to create branches, commits, pull requests, and comment on issues. If `gh` is not available or you don't have network access, just make the file changes and the GitHub Actions workflow will handle creating the branch, commit, and pull request automatically.
 
 ## Your Role
-You are fixing issues in the PydanticAI Research Agent. Follow AGENTS.md (in the project root) for PydanticAI development principles and standards.
+You are fixing issues in the codebase. Follow the project's established patterns and coding standards.
 
 ## Architecture Context
 This is a Python-based AI agent system built with PydanticAI:
@@ -77,7 +77,7 @@ Just make the file changes. The GitHub Actions workflow will automatically creat
 
 ## Remember
 - The person triggering this workflow wants a FAST fix - deliver one or explain why you can't
-- Follow AGENTS.md for PydanticAI development principles and agent patterns
+- Follow the project's established patterns and coding standards
 - Prefer ripgrep over grep for searching
 - Keep changes minimal - resist urge to refactor
 - Focus on making the code changes - the workflow handles git operations if needed
