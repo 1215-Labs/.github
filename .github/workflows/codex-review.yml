@@ -150,11 +150,13 @@ jobs:
       - name: Post review comment
         if: success()
         uses: actions/github-script@v7
+        env:
+          ISSUE_NUMBER: ${{ steps.get-number.outputs.number }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const fs = require('fs');
-            const prNumber = ${{ env.number }};
+            const issueNumber = Number(process.env.ISSUE_NUMBER);
 
             // Read the review output if it exists
             let reviewBody = '## Code Review by Codex\n\n';
@@ -171,7 +173,7 @@ jobs:
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              issue_number: prNumber,
+              issue_number: issueNumber,
               body: reviewBody
             });
 
