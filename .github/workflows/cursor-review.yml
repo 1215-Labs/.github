@@ -88,7 +88,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # Run cursor-agent with the review instructions and permission to post comments
-          cursor-agent -p "$(cat /tmp/cursor_review_prompt.txt)" --model gpt-5 --force
+          cursor-agent -p "$(cat /tmp/cursor_review_prompt.txt)" --model gpt-5.2 --force
 
   unauthorized-message:
     # Post message for unauthorized users
