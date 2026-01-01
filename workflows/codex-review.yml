@@ -54,20 +54,33 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" == "issue_comment" ]; then
             echo "number=${{ github.event.issue.number }}" >> $GITHUB_ENV
+            # issue_comment can be for an Issue OR a PR conversation.
+            # If issue.pull_request exists, treat it as a PR.
+            if [ -n "${{ github.event.issue.pull_request.url }}" ]; then
+              echo "target_kind=pr" >> $GITHUB_ENV
+            else
+              echo "target_kind=issue" >> $GITHUB_ENV
+            fi
           else
             echo "number=${{ github.event.pull_request.number }}" >> $GITHUB_ENV
+            echo "target_kind=pr" >> $GITHUB_ENV
           fi
 
-      - name: Fetch PR details and diff
+      - name: Fetch target details (issue or PR)
         id: fetch-details
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Fetch the PR details and diff using GitHub CLI
-          gh pr view ${{ env.number }} --json title,body,comments,files --jq '{title,body,comments: [.comments[] | {author: .author.login, body: .body}], files: [.files[] | {path: .path, additions: .additions, deletions: .deletions}]}' > /tmp/pr-details.json
-
-          # Fetch the PR diff
-          gh pr diff ${{ env.number }} > /tmp/pr-diff.txt
+          if [ "${{ env.target_kind }}" = "pr" ]; then
+            echo "Fetching PR #${{ env.number }} details + diff..."
+            gh pr view ${{ env.number }} --json title,body,comments,files --jq '{title,body,comments: [.comments[] | {author: .author.login, body: .body}], files: [.files[] | {path: .path, additions: .additions, deletions: .deletions}]}' > /tmp/target-details.json
+            gh pr diff ${{ env.number }} > /tmp/target-diff.txt
+          else
+            echo "Fetching Issue #${{ env.number }} details..."
+            gh issue view ${{ env.number }} --json title,body,comments --jq '{title,body,comments: [.comments[] | {author: .author.login, body: .body}]}' > /tmp/target-details.json
+            # No diff for issues
+            : > /tmp/target-diff.txt
+          fi
 
       - name: Prepare review instructions
         run: |
@@ -86,26 +99,35 @@ jobs:
           # Read the review template
           INSTRUCTIONS=$(cat "$TEMPLATE_PATH")
 
-          # Read PR details
-          PR_DETAILS=$(cat /tmp/pr-details.json)
-          PR_DIFF=$(cat /tmp/pr-diff.txt)
+          TARGET_DETAILS=$(cat /tmp/target-details.json)
+          TARGET_DIFF=$(cat /tmp/target-diff.txt)
 
-          # Prepend context with full PR details and diff
+          # Prepend context with full target details (and diff when available)
           echo "# GitHub Context" > /tmp/codex-review-prompt.md
           echo "- Repository: ${{ github.repository }}" >> /tmp/codex-review-prompt.md
-          echo "- PR Number: ${{ env.number }}" >> /tmp/codex-review-prompt.md
+          if [ "${{ env.target_kind }}" = "pr" ]; then
+            echo "- PR Number: ${{ env.number }}" >> /tmp/codex-review-prompt.md
+          else
+            echo "- Issue Number: ${{ env.number }}" >> /tmp/codex-review-prompt.md
+          fi
           echo "- Triggered by: ${{ github.event.comment.user.login }}" >> /tmp/codex-review-prompt.md
           echo "" >> /tmp/codex-review-prompt.md
-          echo "## Pull Request Details" >> /tmp/codex-review-prompt.md
+          if [ "${{ env.target_kind }}" = "pr" ]; then
+            echo "## Pull Request Details" >> /tmp/codex-review-prompt.md
+          else
+            echo "## Issue Details" >> /tmp/codex-review-prompt.md
+          fi
           echo '```json' >> /tmp/codex-review-prompt.md
-          echo "$PR_DETAILS" >> /tmp/codex-review-prompt.md
+          echo "$TARGET_DETAILS" >> /tmp/codex-review-prompt.md
           echo '```' >> /tmp/codex-review-prompt.md
-          echo "" >> /tmp/codex-review-prompt.md
-          echo "## Pull Request Diff" >> /tmp/codex-review-prompt.md
-          echo '```diff' >> /tmp/codex-review-prompt.md
-          echo "$PR_DIFF" >> /tmp/codex-review-prompt.md
-          echo '```' >> /tmp/codex-review-prompt.md
-          echo "" >> /tmp/codex-review-prompt.md
+          if [ "${{ env.target_kind }}" = "pr" ]; then
+            echo "" >> /tmp/codex-review-prompt.md
+            echo "## Pull Request Diff" >> /tmp/codex-review-prompt.md
+            echo '```diff' >> /tmp/codex-review-prompt.md
+            echo "$TARGET_DIFF" >> /tmp/codex-review-prompt.md
+            echo '```' >> /tmp/codex-review-prompt.md
+            echo "" >> /tmp/codex-review-prompt.md
+          fi
           echo "$INSTRUCTIONS" >> /tmp/codex-review-prompt.md
 
       - name: Run Codex Review
