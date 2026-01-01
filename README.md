@@ -10,18 +10,14 @@ These workflows are designed to be **reusable across repositories**. See `WORKFL
 
 ## What’s included
 
-- **Workflows**: `workflows/*.yml`
+- **Workflows**: `.github/workflows/*.yml`
   - Fix: `claude-fix.yml`, `codex-fix.yml`, `cursor-fix.yml`
   - Review: `claude-review.yml`, `codex-review.yml`, `cursor-review.yml`
   - Release notes: `release-notes.yml`
 - **Prompt templates**:
-  - `issue_fix_prompt.md`
-  - `pr_review_prompt.md`
-  - `pull_request_template.md`
-
-> Note: The workflows support both layouts:
-> - Prompt templates at repo root (this repo)
-> - Prompt templates under `.github/` (when copied into another repo)
+  - `.github/issue_fix_prompt.md`
+  - `.github/pr_review_prompt.md`
+  - `.github/pull_request_template.md`
 
 ## How to trigger
 
