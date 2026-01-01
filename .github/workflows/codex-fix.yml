@@ -22,7 +22,7 @@ jobs:
         github.event_name == 'pull_request_review_comment'
       ) &&
       contains(github.event.comment.body, '@codex-fix') &&
-      contains(fromJSON(env.AI_WORKFLOW_AUTHORIZED_USERS_JSON), github.event.comment.user.login)
+      contains(fromJSON(vars.AI_WORKFLOW_AUTHORIZED_USERS_JSON || '["mdc159"]'), github.event.comment.user.login)
 
     runs-on: ubuntu-latest
 
@@ -53,9 +53,9 @@ jobs:
         id: get-number
         run: |
           if [ "${{ github.event_name }}" == "issue_comment" ]; then
-            echo "number=${{ github.event.issue.number }}" >> $GITHUB_ENV
+            echo "number=${{ github.event.issue.number }}" >> $GITHUB_OUTPUT
           else
-            echo "number=${{ github.event.pull_request.number }}" >> $GITHUB_ENV
+            echo "number=${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
           fi
 
       - name: Fetch issue/PR details
@@ -65,9 +65,9 @@ jobs:
         run: |
           # Fetch the issue or PR details using GitHub CLI
           if [ "${{ github.event_name }}" == "issue_comment" ]; then
-            gh issue view ${{ env.number }} --json title,body,comments --jq '{title,body,comments: [.comments[] | {author: .author.login, body: .body}]}' > /tmp/issue-details.json
+            gh issue view ${{ steps.get-number.outputs.number }} --json title,body,comments --jq '{title,body,comments: [.comments[] | {author: .author.login, body: .body}]}' > /tmp/issue-details.json
           else
-            gh pr view ${{ env.number }} --json title,body,comments --jq '{title,body,comments: [.comments[] | {author: .author.login, body: .body}]}' > /tmp/issue-details.json
+            gh pr view ${{ steps.get-number.outputs.number }} --json title,body,comments --jq '{title,body,comments: [.comments[] | {author: .author.login, body: .body}]}' > /tmp/issue-details.json
           fi
 
       - name: Prepare fix instructions
@@ -93,7 +93,7 @@ jobs:
           # Prepend context with full issue details
           echo "# GitHub Context" > /tmp/codex-fix-prompt.md
           echo "- Repository: ${{ github.repository }}" >> /tmp/codex-fix-prompt.md
-          echo "- Issue/PR Number: ${{ env.number }}" >> /tmp/codex-fix-prompt.md
+          echo "- Issue/PR Number: ${{ steps.get-number.outputs.number }}" >> /tmp/codex-fix-prompt.md
           echo "- Triggered by: ${{ github.event.comment.user.login }}" >> /tmp/codex-fix-prompt.md
           echo "" >> /tmp/codex-fix-prompt.md
           echo "## Issue/PR Details" >> /tmp/codex-fix-prompt.md
@@ -145,7 +145,7 @@ jobs:
         uses: peter-evans/create-pull-request@v6
         with:
           commit-message: "fix: resolve issue via Codex"
-          branch: fix/issue-${{ env.number }}-codex
+          branch: fix/issue-${{ steps.get-number.outputs.number }}-codex
           title: "Fix: Automated fix via Codex"
           body-path: /tmp/pr-body.md
 
@@ -155,7 +155,7 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const issueNumber = ${{ env.number }};
+            const issueNumber = ${{ steps.get-number.outputs.number }};
             const prNumber = ${{ steps.create-pr.outputs.pull-request-number }};
             await github.rest.issues.createComment({
               owner: context.repo.owner,
@@ -172,7 +172,7 @@ jobs:
         github.event_name == 'pull_request_review_comment'
       ) &&
       contains(github.event.comment.body, '@codex-fix') &&
-      !contains(fromJSON(env.AI_WORKFLOW_AUTHORIZED_USERS_JSON), github.event.comment.user.login)
+      !contains(fromJSON(vars.AI_WORKFLOW_AUTHORIZED_USERS_JSON || '["mdc159"]'), github.event.comment.user.login)
 
     runs-on: ubuntu-latest
 

@@ -22,7 +22,7 @@ jobs:
         github.event_name == 'pull_request_review_comment'
       ) &&
       contains(github.event.comment.body, '@codex-review') &&
-      contains(fromJSON(env.AI_WORKFLOW_AUTHORIZED_USERS_JSON), github.event.comment.user.login)
+      contains(fromJSON(vars.AI_WORKFLOW_AUTHORIZED_USERS_JSON || '["mdc159"]'), github.event.comment.user.login)
 
     runs-on: ubuntu-latest
 
@@ -53,17 +53,17 @@ jobs:
         id: get-number
         run: |
           if [ "${{ github.event_name }}" == "issue_comment" ]; then
-            echo "number=${{ github.event.issue.number }}" >> $GITHUB_ENV
+            echo "number=${{ github.event.issue.number }}" >> $GITHUB_OUTPUT
             # issue_comment can be for an Issue OR a PR conversation.
             # If issue.pull_request exists, treat it as a PR.
             if [ -n "${{ github.event.issue.pull_request.url }}" ]; then
-              echo "target_kind=pr" >> $GITHUB_ENV
+              echo "target_kind=pr" >> $GITHUB_OUTPUT
             else
-              echo "target_kind=issue" >> $GITHUB_ENV
+              echo "target_kind=issue" >> $GITHUB_OUTPUT
             fi
           else
-            echo "number=${{ github.event.pull_request.number }}" >> $GITHUB_ENV
-            echo "target_kind=pr" >> $GITHUB_ENV
+            echo "number=${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+            echo "target_kind=pr" >> $GITHUB_OUTPUT
           fi
 
       - name: Fetch target details (issue or PR)
@@ -71,13 +71,13 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if [ "${{ env.target_kind }}" = "pr" ]; then
+          if [ "${{ steps.get-number.outputs.target_kind }}" = "pr" ]; then
             echo "Fetching PR #${{ env.number }} details + diff..."
-            gh pr view ${{ env.number }} --json title,body,comments,files --jq '{title,body,comments: [.comments[] | {author: .author.login, body: .body}], files: [.files[] | {path: .path, additions: .additions, deletions: .deletions}]}' > /tmp/target-details.json
-            gh pr diff ${{ env.number }} > /tmp/target-diff.txt
+            gh pr view ${{ steps.get-number.outputs.number }} --json title,body,comments,files --jq '{title,body,comments: [.comments[] | {author: .author.login, body: .body}], files: [.files[] | {path: .path, additions: .additions, deletions: .deletions}]}' > /tmp/target-details.json
+            gh pr diff ${{ steps.get-number.outputs.number }} > /tmp/target-diff.txt
           else
             echo "Fetching Issue #${{ env.number }} details..."
-            gh issue view ${{ env.number }} --json title,body,comments --jq '{title,body,comments: [.comments[] | {author: .author.login, body: .body}]}' > /tmp/target-details.json
+            gh issue view ${{ steps.get-number.outputs.number }} --json title,body,comments --jq '{title,body,comments: [.comments[] | {author: .author.login, body: .body}]}' > /tmp/target-details.json
             # No diff for issues
             : > /tmp/target-diff.txt
           fi
@@ -105,14 +105,14 @@ jobs:
           # Prepend context with full target details (and diff when available)
           echo "# GitHub Context" > /tmp/codex-review-prompt.md
           echo "- Repository: ${{ github.repository }}" >> /tmp/codex-review-prompt.md
-          if [ "${{ env.target_kind }}" = "pr" ]; then
-            echo "- PR Number: ${{ env.number }}" >> /tmp/codex-review-prompt.md
+          if [ "${{ steps.get-number.outputs.target_kind }}" = "pr" ]; then
+            echo "- PR Number: ${{ steps.get-number.outputs.number }}" >> /tmp/codex-review-prompt.md
           else
-            echo "- Issue Number: ${{ env.number }}" >> /tmp/codex-review-prompt.md
+            echo "- Issue Number: ${{ steps.get-number.outputs.number }}" >> /tmp/codex-review-prompt.md
           fi
           echo "- Triggered by: ${{ github.event.comment.user.login }}" >> /tmp/codex-review-prompt.md
           echo "" >> /tmp/codex-review-prompt.md
-          if [ "${{ env.target_kind }}" = "pr" ]; then
+          if [ "${{ steps.get-number.outputs.target_kind }}" = "pr" ]; then
             echo "## Pull Request Details" >> /tmp/codex-review-prompt.md
           else
             echo "## Issue Details" >> /tmp/codex-review-prompt.md
@@ -120,7 +120,7 @@ jobs:
           echo '```json' >> /tmp/codex-review-prompt.md
           echo "$TARGET_DETAILS" >> /tmp/codex-review-prompt.md
           echo '```' >> /tmp/codex-review-prompt.md
-          if [ "${{ env.target_kind }}" = "pr" ]; then
+          if [ "${{ steps.get-number.outputs.target_kind }}" = "pr" ]; then
             echo "" >> /tmp/codex-review-prompt.md
             echo "## Pull Request Diff" >> /tmp/codex-review-prompt.md
             echo '```diff' >> /tmp/codex-review-prompt.md
@@ -183,7 +183,7 @@ jobs:
         github.event_name == 'pull_request_review_comment'
       ) &&
       contains(github.event.comment.body, '@codex-review') &&
-      !contains(fromJSON(env.AI_WORKFLOW_AUTHORIZED_USERS_JSON), github.event.comment.user.login)
+      !contains(fromJSON(vars.AI_WORKFLOW_AUTHORIZED_USERS_JSON || '["mdc159"]'), github.event.comment.user.login)
 
     runs-on: ubuntu-latest
 
