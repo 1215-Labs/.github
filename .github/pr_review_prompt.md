@@ -78,7 +78,7 @@ Use git commands or file reading to understand the changes in the repository.
 - Edge cases and external service failures covered
 - Tests in `tests/` directory with pytest
 
-### 5. Production-Ready AI Development Principles (from AGENTS.md, be sure to read this file)
+### 5. Production-Ready AI Development Principles
 - Comprehensive error handling for tool failures and model errors
 - Input validation to prevent prompt injection
 - Rate limiting for external API calls
@@ -170,7 +170,7 @@ Security focus for this AI agent system should be on:
 [Brief explanation rationale for above recommendations, considering this is a production-ready AI agent project]
 
 ---
-*Review based on PydanticAI Research Agent guidelines and AGENTS.md principles*
+*Review based on project guidelines and established coding standards*
 
 ## POST YOUR REVIEW
 
