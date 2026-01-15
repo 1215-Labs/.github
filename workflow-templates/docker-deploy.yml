@@ -1,0 +1,49 @@
+name: Docker Build and Deploy
+
+on:
+  push:
+    branches: [ main ]
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    name: Build Docker Image
+    uses: 1215-Labs/.github/.github/workflows/reusable-docker-build.yml@main
+    with:
+      image-name: ${{ github.repository }}  # e.g., 1215-labs/my-app
+      dockerfile-path: './Dockerfile'
+      registry: 'ghcr.io'
+      context: '.'
+      platforms: 'linux/amd64,linux/arm64'
+    secrets:
+      registry-username: ${{ github.actor }}
+      registry-password: ${{ secrets.GITHUB_TOKEN }}
+
+  deploy-staging:
+    name: Deploy to Staging
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    uses: 1215-Labs/.github/.github/workflows/reusable-deploy.yml@main
+    with:
+      environment: 'staging'
+      deployment-command: 'echo "Add your deployment command here"'
+      smoke-test-url: 'https://staging.example.com'  # Change to your staging URL
+      smoke-test-enabled: true
+    secrets:
+      deployment-token: ${{ secrets.STAGING_DEPLOY_TOKEN }}
+
+  deploy-production:
+    name: Deploy to Production
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    uses: 1215-Labs/.github/.github/workflows/reusable-deploy.yml@main
+    with:
+      environment: 'production'
+      deployment-command: 'echo "Add your deployment command here"'
+      smoke-test-url: 'https://example.com'  # Change to your production URL
+      smoke-test-enabled: true
+      slack-webhook-enabled: true
+    secrets:
+      deployment-token: ${{ secrets.PRODUCTION_DEPLOY_TOKEN }}
+      slack-webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}

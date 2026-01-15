@@ -1,0 +1,15 @@
+{
+  "name": "Node.js CI Workflow",
+  "description": "Continuous Integration workflow for Node.js projects using the 1215-Labs reusable CI workflow. Runs linting, tests, and uploads coverage reports.",
+  "iconName": "nodejs",
+  "categories": [
+    "JavaScript",
+    "TypeScript",
+    "Node.js",
+    "CI",
+    "Testing"
+  ],
+  "filePatterns": [
+    "package.json$"
+  ]
+}

@@ -1,0 +1,94 @@
+# Example Node.js CI Workflow
+#
+# This example demonstrates how to use the 1215-Labs reusable CI workflow
+# for a Node.js project with comprehensive testing and linting.
+#
+# Copy this file to your repository: .github/workflows/ci.yml
+
+name: Node.js CI
+
+# Trigger the workflow on pushes and pull requests to main branches
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+# Cancel in-progress runs of the same workflow
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Single Node.js version
+  ci:
+    name: CI (Node.js 18)
+    uses: 1215-Labs/.github/.github/workflows/reusable-ci.yml@main
+    with:
+      language: 'nodejs'
+      node-version: '18'
+      run-tests: true
+      run-lint: true
+      working-directory: '.'
+
+  # Matrix testing across multiple Node.js versions
+  ci-matrix:
+    name: CI (Node.js ${{ matrix.node-version }})
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [16, 18, 20]
+        os: [ubuntu-latest]
+    uses: 1215-Labs/.github/.github/workflows/reusable-ci.yml@main
+    with:
+      language: 'nodejs'
+      node-version: ${{ matrix.node-version }}
+      run-tests: true
+      run-lint: true
+      working-directory: '.'
+
+  # Monorepo example - test multiple packages
+  ci-frontend:
+    name: CI Frontend
+    uses: 1215-Labs/.github/.github/workflows/reusable-ci.yml@main
+    with:
+      language: 'nodejs'
+      node-version: '18'
+      run-tests: true
+      run-lint: true
+      working-directory: './frontend'
+
+  ci-backend:
+    name: CI Backend
+    uses: 1215-Labs/.github/.github/workflows/reusable-ci.yml@main
+    with:
+      language: 'nodejs'
+      node-version: '18'
+      run-tests: true
+      run-lint: true
+      working-directory: './backend'
+
+  # Using composite action directly (alternative approach)
+  custom-ci:
+    name: Custom CI Workflow
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+      - name: Setup Node.js environment
+        uses: 1215-Labs/.github/.github/actions/setup-nodejs-environment@main
+        with:
+          node-version: '18'
+          working-directory: '.'
+      
+      - name: Run custom tests
+        run: npm run test:custom
+      
+      - name: Build application
+        run: npm run build
+      
+      - name: Deploy to staging
+        if: github.ref == 'refs/heads/main'
+        run: npm run deploy:staging
+        env:
+          DEPLOY_TOKEN: ${{ secrets.STAGING_DEPLOY_TOKEN }}
