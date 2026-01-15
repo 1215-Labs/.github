@@ -142,7 +142,7 @@ jobs:
       - name: Create pull request with fixes
         if: success()
         id: create-pr
-        uses: peter-evans/create-pull-request@v6
+        uses: peter-evans/create-pull-request@v8
         with:
           commit-message: "fix: resolve issue via Codex"
           branch: fix/issue-${{ steps.get-number.outputs.number }}-codex
