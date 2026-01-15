@@ -63,6 +63,8 @@ jobs:
 
 ## Documentation
 
+🚀 **[QUICKSTART.md](QUICKSTART.md)** - Get started in 3 steps (perfect for beginners)
+
 📖 **[WORKFLOWS.md](WORKFLOWS.md)** - Complete documentation for the centralized workflow system:
 - Detailed guide for all reusable workflows
 - Composite action references
