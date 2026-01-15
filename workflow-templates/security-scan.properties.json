@@ -1,0 +1,10 @@
+{
+  "name": "Security Scan Workflow",
+  "description": "Comprehensive security scanning workflow using CodeQL, dependency scanning, and secret detection. Runs on push, pull requests, and weekly schedule.",
+  "iconName": "shield",
+  "categories": [
+    "Security",
+    "Code scanning",
+    "Dependency scanning"
+  ]
+}

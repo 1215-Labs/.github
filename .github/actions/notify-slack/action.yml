@@ -1,0 +1,141 @@
+name: 'Notify Slack'
+description: 'Send workflow status notifications to Slack'
+author: '1215-Labs'
+
+branding:
+  icon: 'message-square'
+  color: 'purple'
+
+inputs:
+  webhook-url:
+    description: 'Slack webhook URL'
+    required: true
+  status:
+    description: 'Workflow status (success, failure, cancelled)'
+    required: true
+  message:
+    description: 'Custom message to send'
+    required: false
+  job-name:
+    description: 'Name of the job'
+    required: false
+    default: 'GitHub Actions'
+  include-commit-info:
+    description: 'Include commit information in the message'
+    required: false
+    default: 'true'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Determine notification color and emoji
+      id: notification
+      shell: bash
+      run: |
+        case "${{ inputs.status }}" in
+          success)
+            echo "color=good" >> $GITHUB_OUTPUT
+            echo "emoji=✅" >> $GITHUB_OUTPUT
+            echo "text=succeeded" >> $GITHUB_OUTPUT
+            ;;
+          failure)
+            echo "color=danger" >> $GITHUB_OUTPUT
+            echo "emoji=❌" >> $GITHUB_OUTPUT
+            echo "text=failed" >> $GITHUB_OUTPUT
+            ;;
+          cancelled)
+            echo "color=warning" >> $GITHUB_OUTPUT
+            echo "emoji=⚠️" >> $GITHUB_OUTPUT
+            echo "text=was cancelled" >> $GITHUB_OUTPUT
+            ;;
+          *)
+            echo "color=#808080" >> $GITHUB_OUTPUT
+            echo "emoji=ℹ️" >> $GITHUB_OUTPUT
+            echo "text=completed" >> $GITHUB_OUTPUT
+            ;;
+        esac
+
+    - name: Prepare message
+      id: message
+      shell: bash
+      run: |
+        if [ -n "${{ inputs.message }}" ]; then
+          MESSAGE="${{ inputs.message }}"
+        else
+          MESSAGE="${{ steps.notification.outputs.emoji }} ${{ inputs.job-name }} ${{ steps.notification.outputs.text }}"
+        fi
+        
+        # Escape special characters for JSON
+        MESSAGE=$(echo "$MESSAGE" | sed 's/"/\\"/g')
+        echo "text=$MESSAGE" >> $GITHUB_OUTPUT
+
+    - name: Build Slack payload
+      id: payload
+      shell: bash
+      run: |
+        # Start building the payload
+        PAYLOAD='{
+          "text": "${{ steps.message.outputs.text }}",
+          "attachments": [
+            {
+              "color": "${{ steps.notification.outputs.color }}",
+              "fields": [
+                {
+                  "title": "Repository",
+                  "value": "${{ github.repository }}",
+                  "short": true
+                },
+                {
+                  "title": "Status",
+                  "value": "${{ steps.notification.outputs.text }}",
+                  "short": true
+                }'
+        
+        # Add commit info if enabled
+        if [ "${{ inputs.include-commit-info }}" == "true" ]; then
+          PAYLOAD="$PAYLOAD,
+                {
+                  "title": "Branch",
+                  "value": "${{ github.ref_name }}",
+                  "short": true
+                },
+                {
+                  "title": "Triggered by",
+                  "value": "${{ github.actor }}",
+                  "short": true
+                },
+                {
+                  "title": "Commit",
+                  "value": "<https://github.com/${{ github.repository }}/commit/${{ github.sha }}|$(echo ${{ github.sha }} | cut -c1-7)>",
+                  "short": true
+                },
+                {
+                  "title": "Workflow",
+                  "value": "<https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Run>",
+                  "short": true
+                }"
+        fi
+        
+        PAYLOAD="$PAYLOAD
+              ]
+            }
+          ]
+        }"
+        
+        echo "$PAYLOAD" > /tmp/slack-payload.json
+        echo "payload-file=/tmp/slack-payload.json" >> $GITHUB_OUTPUT
+
+    - name: Send to Slack
+      shell: bash
+      run: |
+        curl -X POST \
+          -H 'Content-type: application/json' \
+          --data @${{ steps.payload.outputs.payload-file }} \
+          "${{ inputs.webhook-url }}"
+        
+        if [ $? -eq 0 ]; then
+          echo "✅ Slack notification sent successfully"
+        else
+          echo "⚠️ Failed to send Slack notification"
+          exit 1
+        fi

@@ -1,69 +1,194 @@
-# 1215-Labs GitHub AI Workflows (`.github`)
+# 1215-Labs Organization `.github` Repository
 
-This repository contains **comment-driven GitHub Actions workflows** that run AI agents (Claude / Codex / Cursor) to:
+This repository serves as the central hub for **reusable workflows, composite actions, and automation** across all 1215-Labs repositories.
+
+## What's Available
+
+### 🤖 AI-Powered Workflows
+Comment-driven GitHub Actions workflows that run AI agents (Claude / Codex / Cursor) to:
 
 - Create automated **issue fixes** (write access)
 - Perform automated **PR reviews** (read-only + comment)
 - Generate **release notes**
 
-These workflows are designed to be **reusable across repositories**. See `WORKFLOWS_SETUP.md` for the full setup checklist and org-level scaling guidance.
+### 🔄 Reusable CI/CD Workflows
+Production-ready workflows for common development tasks:
 
-## What’s included
+- **CI Pipeline** - Node.js and Python testing with linting and coverage
+- **Security Scanning** - CodeQL, dependency checks, and secret detection
+- **Docker Build** - Multi-platform container builds with vulnerability scanning
+- **Deployment** - Environment-aware deployments with smoke tests
 
-- **Workflows**: `.github/workflows/*.yml`
-  - Fix: `claude-fix.yml`, `codex-fix.yml`, `cursor-fix.yml`
-  - Review: `claude-review.yml`, `codex-review.yml`, `cursor-review.yml`
-  - Release notes: `release-notes.yml`
-- **Prompt templates**:
-  - `.github/issue_fix_prompt.md`
-  - `.github/pr_review_prompt.md`
-  - `.github/pull_request_template.md`
+### 🧩 Composite Actions
+Pre-built action steps for common setup tasks:
 
-## How to trigger
+- Setup Node.js environment with automatic package manager detection
+- Setup Python environment with pip/poetry/pipenv support
+- Slack notifications for workflow status
 
-Create an issue or PR, then post a **new comment** containing one of the trigger tags:
+### 📝 Workflow Templates
+Starter templates that appear in your repository's Actions tab for quick setup.
 
-- `@claude-fix` / `@claude-review`
-- `@codex-fix` / `@codex-review`
-- `@cursor-fix` / `@cursor-review`
+## Quick Start
 
-The workflow will only run if the commenter is allowlisted (see below).
+1. **Choose a workflow approach:**
+   - Use [workflow templates](#features) from your repository's Actions tab
+   - Or call [reusable workflows](#features) directly in your workflow files
 
-## Required configuration
+2. **For AI workflows**, trigger by posting a comment:
+   - `@claude-fix` / `@claude-review`
+   - `@codex-fix` / `@codex-review`
+   - `@cursor-fix` / `@cursor-review`
 
-### 1) Allowlist (required)
+3. **Configure required secrets** (see [Configuration](#configuration) below)
 
-Create an Actions variable named:
+### Using Reusable Workflows
 
-- `AI_WORKFLOW_AUTHORIZED_USERS_JSON`
-  - Value: JSON array of GitHub usernames, e.g. `["your-handle","teammate1"]`
+Add to your repository's `.github/workflows/ci.yml`:
 
-This can be set at the **repo level** or **organization level**.
+```yaml
+name: CI
 
-### 2) Secrets (required for the workflows you enable)
+on: [push, pull_request]
 
-Add the relevant Actions secret(s):
+jobs:
+  test:
+    uses: 1215-Labs/.github/.github/workflows/reusable-ci.yml@main
+    with:
+      language: 'nodejs'
+      node-version: '18'
+      run-tests: true
+      run-lint: true
+```
 
-- **Claude workflows**: `CLAUDE_CODE_OAUTH_TOKEN`
-- **Codex workflows**: `OPENAI_API_KEY`
-- **Cursor workflows**: `CURSOR_API_KEY`
+## Documentation
 
-Secrets can be stored at the **repo level** or **organization level**.
+🚀 **[QUICKSTART.md](QUICKSTART.md)** - Get started in 3 steps (perfect for beginners)
 
-## Repo vs org-level setup
+📖 **[WORKFLOWS.md](WORKFLOWS.md)** - Complete documentation for the centralized workflow system:
+- Detailed guide for all reusable workflows
+- Composite action references
+- Configuration examples
+- Best practices and troubleshooting
 
-For the detailed steps (including org-level scaling and reusable workflow caveats), read:
+📋 **[WORKFLOWS_SETUP.md](WORKFLOWS_SETUP.md)** - AI workflow setup guide:
+- Authorization and allowlisting
+- Organization-level secrets configuration
+- Reusable workflow patterns
 
-- `WORKFLOWS_SETUP.md`
+🤝 **[CONTRIBUTING.md](CONTRIBUTING.md)** - Contribution guidelines
 
-GitHub reference:
+📜 **[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)** - Community standards
 
-- [Using secrets in GitHub Actions](https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/use-secrets)
+## Configuration
 
-## Security notes
+### AI Workflows
 
-- These workflows restrict execution using `AI_WORKFLOW_AUTHORIZED_USERS_JSON`.
-- `GITHUB_TOKEN` is used for GitHub API access inside workflows (exposed as `GH_TOKEN` for `gh`).
-- For cases where actions should run as a real user instead of `github-actions[bot]`, consider using a fine-grained PAT and updating the workflow(s) accordingly (see `WORKFLOWS_SETUP.md`).
+#### Allowlist (Required)
+Set the Actions variable `AI_WORKFLOW_AUTHORIZED_USERS_JSON`:
+```json
+["your-handle","teammate1"]
+```
 
+#### Secrets (Required)
+- **Claude**: `CLAUDE_CODE_OAUTH_TOKEN`
+- **Codex**: `OPENAI_API_KEY`
+- **Cursor**: `CURSOR_API_KEY`
 
+### CI/CD Workflows
+
+#### For Docker Builds
+- `GITHUB_TOKEN` (automatically provided)
+
+#### For Deployments
+- `STAGING_DEPLOY_TOKEN`
+- `PRODUCTION_DEPLOY_TOKEN`
+- `SLACK_WEBHOOK_URL` (optional)
+
+**Tip**: Configure secrets at the organization level for easier management across repositories.
+
+## Repository Structure
+
+```
+.github/
+├── workflows/              # Reusable and AI-driven workflows
+│   ├── reusable-ci.yml
+│   ├── reusable-security-scan.yml
+│   ├── reusable-docker-build.yml
+│   ├── reusable-deploy.yml
+│   ├── claude-fix.yml
+│   ├── claude-review.yml
+│   └── ...
+├── actions/                # Composite actions
+│   ├── setup-nodejs-environment/
+│   ├── setup-python-environment/
+│   └── notify-slack/
+├── issue_fix_prompt.md     # AI fix prompt template
+├── pr_review_prompt.md     # AI review prompt template
+└── pull_request_template.md
+workflow-templates/         # Starter templates
+├── ci-nodejs.yml
+├── ci-python.yml
+├── security-scan.yml
+└── docker-deploy.yml
+examples/                   # Usage examples
+├── example-nodejs-ci.yml
+├── example-python-ci.yml
+└── example-full-pipeline.yml
+```
+
+## Features
+
+### Reusable Workflows
+
+✅ **CI Workflow** - Automated testing and linting for Node.js and Python  
+✅ **Security Scan** - CodeQL, dependency scanning, secret detection  
+✅ **Docker Build** - Multi-platform container builds with caching  
+✅ **Deployment** - Environment-aware deployments with smoke tests
+
+### Composite Actions
+
+✅ **Setup Node.js** - Auto-detects npm, yarn, or pnpm  
+✅ **Setup Python** - Supports pip, poetry, and pipenv  
+✅ **Slack Notify** - Rich workflow notifications
+
+### Best Practices Built-in
+
+✅ Dependency caching for faster builds  
+✅ Concurrency control to cancel outdated runs  
+✅ Security scanning and vulnerability detection  
+✅ Artifact management and retention  
+✅ Multi-platform support  
+✅ Comprehensive error handling
+
+## Examples
+
+See the `examples/` directory for complete, working examples:
+
+- **example-nodejs-ci.yml** - Node.js continuous integration
+- **example-python-ci.yml** - Python continuous integration
+- **example-full-pipeline.yml** - Complete CI/CD pipeline with Docker and deployment
+
+## Security
+
+- AI workflows restrict execution using allowlists
+- All workflows follow principle of least privilege
+- Secrets are never logged or exposed
+- GitHub Environments provide approval gates for production deploys
+- Dependabot keeps action versions up to date
+
+For security issues, please contact the 1215-Labs security team.
+
+## Support
+
+- 📖 Read [WORKFLOWS.md](WORKFLOWS.md) for detailed documentation
+- 🐛 [Open an issue](https://github.com/1215-Labs/.github/issues) for bugs
+- 💡 [Start a discussion](https://github.com/1215-Labs/.github/discussions) for questions
+
+## License
+
+Available for use by all 1215-Labs organization repositories.
+
+---
+
+**Maintained by**: 1215-Labs DevOps Team

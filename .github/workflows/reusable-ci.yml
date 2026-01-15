@@ -1,0 +1,174 @@
+name: Reusable CI Workflow
+
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        description: 'Node.js version to use'
+        required: false
+        type: string
+        default: '18'
+      python-version:
+        description: 'Python version to use'
+        required: false
+        type: string
+        default: '3.11'
+      run-tests:
+        description: 'Whether to run tests'
+        required: false
+        type: boolean
+        default: true
+      run-lint:
+        description: 'Whether to run linting'
+        required: false
+        type: boolean
+        default: true
+      language:
+        description: 'Primary language (nodejs or python)'
+        required: true
+        type: string
+      working-directory:
+        description: 'Working directory for commands'
+        required: false
+        type: string
+        default: '.'
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    # Cancel outdated workflow runs
+    concurrency:
+      group: ci-${{ github.ref }}-${{ inputs.language }}
+      cancel-in-progress: true
+
+    steps:
+      # Checkout repository
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for better analysis
+
+      # Node.js setup and workflow
+      - name: Setup Node.js environment
+        if: inputs.language == 'nodejs'
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: 'npm'
+          cache-dependency-path: ${{ inputs.working-directory }}/package-lock.json
+
+      - name: Install Node.js dependencies
+        if: inputs.language == 'nodejs'
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          if [ -f "package-lock.json" ]; then
+            npm ci
+          elif [ -f "yarn.lock" ]; then
+            yarn install --frozen-lockfile
+          elif [ -f "pnpm-lock.yaml" ]; then
+            npm install -g pnpm
+            pnpm install --frozen-lockfile
+          else
+            npm install
+          fi
+
+      - name: Run Node.js linting
+        if: inputs.language == 'nodejs' && inputs.run-lint
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          if npm run lint --if-present; then
+            echo "✅ Linting passed"
+          else
+            echo "⚠️ Linting script not found or failed"
+            exit 1
+          fi
+
+      - name: Run Node.js tests
+        if: inputs.language == 'nodejs' && inputs.run-tests
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          if npm test --if-present; then
+            echo "✅ Tests passed"
+          else
+            echo "⚠️ Test script not found or failed"
+            exit 1
+          fi
+
+      # Python setup and workflow
+      - name: Setup Python environment
+        if: inputs.language == 'python'
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python-version }}
+          cache: 'pip'
+
+      - name: Install Python dependencies
+        if: inputs.language == 'python'
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f "requirements.txt" ]; then
+            pip install -r requirements.txt
+          fi
+          if [ -f "requirements-dev.txt" ]; then
+            pip install -r requirements-dev.txt
+          fi
+          if [ -f "pyproject.toml" ]; then
+            pip install -e .[dev] || pip install -e .
+          fi
+
+      - name: Run Python linting
+        if: inputs.language == 'python' && inputs.run-lint
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          # Try common linting tools
+          if command -v flake8 &> /dev/null; then
+            echo "Running flake8..."
+            flake8 . || true
+          fi
+          if command -v pylint &> /dev/null; then
+            echo "Running pylint..."
+            pylint **/*.py || true
+          fi
+          if command -v black &> /dev/null; then
+            echo "Running black (check only)..."
+            black --check . || true
+          fi
+
+      - name: Run Python tests
+        if: inputs.language == 'python' && inputs.run-tests
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          if command -v pytest &> /dev/null; then
+            echo "Running pytest..."
+            pytest --cov --cov-report=xml --cov-report=html
+          elif [ -f "manage.py" ]; then
+            echo "Running Django tests..."
+            python manage.py test
+          else
+            echo "Running unittest..."
+            python -m unittest discover
+          fi
+
+      # Upload coverage reports (works for both Node.js and Python)
+      - name: Upload coverage to Codecov
+        if: inputs.run-tests
+        uses: codecov/codecov-action@v4
+        continue-on-error: true
+        with:
+          directory: ${{ inputs.working-directory }}
+          fail_ci_if_error: false
+
+      - name: Upload coverage artifacts
+        if: inputs.run-tests
+        uses: actions/upload-artifact@v4
+        continue-on-error: true
+        with:
+          name: coverage-report-${{ inputs.language }}
+          path: |
+            ${{ inputs.working-directory }}/coverage/
+            ${{ inputs.working-directory }}/htmlcov/
+            ${{ inputs.working-directory }}/coverage.xml
+          retention-days: 30

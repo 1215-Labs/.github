@@ -1,0 +1,94 @@
+name: 'Setup Node.js Environment'
+description: 'Checkout code, setup Node.js with caching, and install dependencies'
+author: '1215-Labs'
+
+branding:
+  icon: 'package'
+  color: 'green'
+
+inputs:
+  node-version:
+    description: 'Node.js version to use'
+    required: false
+    default: '18'
+  working-directory:
+    description: 'Working directory for Node.js project'
+    required: false
+    default: '.'
+  registry-url:
+    description: 'npm registry URL (optional, for private packages)'
+    required: false
+  cache:
+    description: 'Enable dependency caching'
+    required: false
+    default: 'true'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+        registry-url: ${{ inputs.registry-url }}
+        cache: ${{ inputs.cache == 'true' && 'npm' || '' }}
+        cache-dependency-path: ${{ inputs.working-directory }}/package-lock.json
+
+    - name: Detect package manager
+      id: detect-pm
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        if [ -f "pnpm-lock.yaml" ]; then
+          echo "manager=pnpm" >> $GITHUB_OUTPUT
+          echo "lock-file=pnpm-lock.yaml" >> $GITHUB_OUTPUT
+          echo "install-cmd=pnpm install --frozen-lockfile" >> $GITHUB_OUTPUT
+        elif [ -f "yarn.lock" ]; then
+          echo "manager=yarn" >> $GITHUB_OUTPUT
+          echo "lock-file=yarn.lock" >> $GITHUB_OUTPUT
+          echo "install-cmd=yarn install --frozen-lockfile" >> $GITHUB_OUTPUT
+        elif [ -f "package-lock.json" ]; then
+          echo "manager=npm" >> $GITHUB_OUTPUT
+          echo "lock-file=package-lock.json" >> $GITHUB_OUTPUT
+          echo "install-cmd=npm ci" >> $GITHUB_OUTPUT
+        else
+          echo "manager=npm" >> $GITHUB_OUTPUT
+          echo "lock-file=package.json" >> $GITHUB_OUTPUT
+          echo "install-cmd=npm install" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Setup pnpm
+      if: steps.detect-pm.outputs.manager == 'pnpm'
+      uses: pnpm/action-setup@v3
+      with:
+        version: 8
+
+    - name: Setup Yarn
+      if: steps.detect-pm.outputs.manager == 'yarn'
+      shell: bash
+      run: corepack enable
+
+    - name: Install dependencies
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        echo "📦 Installing dependencies with ${{ steps.detect-pm.outputs.manager }}..."
+        ${{ steps.detect-pm.outputs.install-cmd }}
+        echo "✅ Dependencies installed successfully"
+
+    - name: Display environment info
+      shell: bash
+      run: |
+        echo "Node.js version: $(node --version)"
+        echo "npm version: $(npm --version)"
+        if command -v pnpm &> /dev/null; then
+          echo "pnpm version: $(pnpm --version)"
+        fi
+        if command -v yarn &> /dev/null; then
+          echo "Yarn version: $(yarn --version)"
+        fi

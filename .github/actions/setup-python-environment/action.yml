@@ -1,0 +1,144 @@
+name: 'Setup Python Environment'
+description: 'Checkout code, setup Python with caching, and install dependencies'
+author: '1215-Labs'
+
+branding:
+  icon: 'code'
+  color: 'blue'
+
+inputs:
+  python-version:
+    description: 'Python version to use'
+    required: false
+    default: '3.11'
+  working-directory:
+    description: 'Working directory for Python project'
+    required: false
+    default: '.'
+  cache:
+    description: 'Enable dependency caching'
+    required: false
+    default: 'true'
+  install-dev-dependencies:
+    description: 'Install development dependencies'
+    required: false
+    default: 'true'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+        cache: ${{ inputs.cache == 'true' && 'pip' || '' }}
+
+    - name: Detect dependency manager
+      id: detect-pm
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        if [ -f "pyproject.toml" ] && grep -q "\[tool.poetry\]" pyproject.toml; then
+          echo "manager=poetry" >> $GITHUB_OUTPUT
+        elif [ -f "Pipfile" ]; then
+          echo "manager=pipenv" >> $GITHUB_OUTPUT
+        elif [ -f "requirements.txt" ] || [ -f "setup.py" ] || [ -f "pyproject.toml" ]; then
+          echo "manager=pip" >> $GITHUB_OUTPUT
+        else
+          echo "manager=pip" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Setup Poetry
+      if: steps.detect-pm.outputs.manager == 'poetry'
+      shell: bash
+      run: |
+        pip install poetry
+        poetry config virtualenvs.create true
+        poetry config virtualenvs.in-project true
+
+    - name: Setup Pipenv
+      if: steps.detect-pm.outputs.manager == 'pipenv'
+      shell: bash
+      run: |
+        pip install pipenv
+
+    - name: Upgrade pip
+      shell: bash
+      run: |
+        python -m pip install --upgrade pip setuptools wheel
+
+    - name: Install dependencies (Poetry)
+      if: steps.detect-pm.outputs.manager == 'poetry'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        echo "📦 Installing dependencies with Poetry..."
+        if [ "${{ inputs.install-dev-dependencies }}" == "true" ]; then
+          poetry install
+        else
+          poetry install --no-dev
+        fi
+        echo "✅ Dependencies installed successfully"
+
+    - name: Install dependencies (Pipenv)
+      if: steps.detect-pm.outputs.manager == 'pipenv'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        echo "📦 Installing dependencies with Pipenv..."
+        if [ "${{ inputs.install-dev-dependencies }}" == "true" ]; then
+          pipenv install --dev
+        else
+          pipenv install
+        fi
+        echo "✅ Dependencies installed successfully"
+
+    - name: Install dependencies (pip)
+      if: steps.detect-pm.outputs.manager == 'pip'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        echo "📦 Installing dependencies with pip..."
+        
+        # Install from requirements.txt
+        if [ -f "requirements.txt" ]; then
+          pip install -r requirements.txt
+        fi
+        
+        # Install dev dependencies if enabled
+        if [ "${{ inputs.install-dev-dependencies }}" == "true" ]; then
+          if [ -f "requirements-dev.txt" ]; then
+            pip install -r requirements-dev.txt
+          fi
+          if [ -f "requirements-test.txt" ]; then
+            pip install -r requirements-test.txt
+          fi
+        fi
+        
+        # Install package in editable mode if setup.py or pyproject.toml exists
+        if [ -f "setup.py" ] || [ -f "pyproject.toml" ]; then
+          if [ "${{ inputs.install-dev-dependencies }}" == "true" ]; then
+            pip install -e .[dev] 2>/dev/null || pip install -e . || true
+          else
+            pip install -e . || true
+          fi
+        fi
+        
+        echo "✅ Dependencies installed successfully"
+
+    - name: Display environment info
+      shell: bash
+      run: |
+        echo "Python version: $(python --version)"
+        echo "pip version: $(pip --version)"
+        if command -v poetry &> /dev/null; then
+          echo "Poetry version: $(poetry --version)"
+        fi
+        if command -v pipenv &> /dev/null; then
+          echo "Pipenv version: $(pipenv --version)"
+        fi

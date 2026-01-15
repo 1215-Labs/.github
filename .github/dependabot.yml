@@ -1,0 +1,71 @@
+# Dependabot configuration for keeping GitHub Actions up to date
+# This ensures that all workflows and actions use the latest stable versions
+
+version: 2
+
+updates:
+  # Monitor GitHub Actions in .github/workflows/
+  - package-ecosystem: "github-actions"
+    directory: "/.github/workflows/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "1215-Labs/devops"
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+
+  # Monitor composite actions
+  - package-ecosystem: "github-actions"
+    directory: "/.github/actions/setup-nodejs-environment/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "1215-Labs/devops"
+    labels:
+      - "dependencies"
+      - "composite-actions"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+
+  - package-ecosystem: "github-actions"
+    directory: "/.github/actions/setup-python-environment/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "1215-Labs/devops"
+    labels:
+      - "dependencies"
+      - "composite-actions"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+
+  - package-ecosystem: "github-actions"
+    directory: "/.github/actions/notify-slack/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "1215-Labs/devops"
+    labels:
+      - "dependencies"
+      - "composite-actions"
+    commit-message:
+      prefix: "chore"
+      include: "scope"

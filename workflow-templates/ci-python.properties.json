@@ -1,0 +1,15 @@
+{
+  "name": "Python CI Workflow",
+  "description": "Continuous Integration workflow for Python projects using the 1215-Labs reusable CI workflow. Runs linting (flake8, pylint, black), tests (pytest), and uploads coverage reports.",
+  "iconName": "python",
+  "categories": [
+    "Python",
+    "CI",
+    "Testing"
+  ],
+  "filePatterns": [
+    "requirements.txt$",
+    "pyproject.toml$",
+    "setup.py$"
+  ]
+}

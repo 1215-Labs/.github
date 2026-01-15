@@ -1,0 +1,214 @@
+name: Reusable Deployment Workflow
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: 'Deployment environment (staging or production)'
+        required: true
+        type: string
+      deployment-command:
+        description: 'Command to execute for deployment'
+        required: true
+        type: string
+      working-directory:
+        description: 'Working directory for deployment commands'
+        required: false
+        type: string
+        default: '.'
+      smoke-test-url:
+        description: 'URL to perform smoke test after deployment'
+        required: false
+        type: string
+      smoke-test-enabled:
+        description: 'Whether to run smoke tests'
+        required: false
+        type: boolean
+        default: true
+      slack-webhook-enabled:
+        description: 'Whether to send Slack notifications'
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      deployment-token:
+        description: 'Authentication token for deployment'
+        required: true
+      slack-webhook-url:
+        description: 'Slack webhook URL for notifications'
+        required: false
+
+jobs:
+  deploy:
+    name: Deploy to ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    # Use GitHub Environments for approval gates and protection rules
+    environment:
+      name: ${{ inputs.environment }}
+      url: ${{ inputs.smoke-test-url }}
+
+    # Prevent concurrent deployments to the same environment
+    concurrency:
+      group: deploy-${{ inputs.environment }}
+      cancel-in-progress: false
+
+    permissions:
+      contents: read
+      deployments: write
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate environment
+        run: |
+          if [[ "${{ inputs.environment }}" != "staging" && "${{ inputs.environment }}" != "production" ]]; then
+            echo "❌ Invalid environment: ${{ inputs.environment }}"
+            echo "Environment must be either 'staging' or 'production'"
+            exit 1
+          fi
+          echo "✅ Deploying to ${{ inputs.environment }}"
+
+      - name: Setup deployment environment
+        run: |
+          # Set up any required tools or configurations
+          echo "Setting up deployment environment..."
+          
+          # Export deployment token as environment variable
+          echo "DEPLOYMENT_TOKEN=${{ secrets.deployment-token }}" >> $GITHUB_ENV
+
+      - name: Execute deployment
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          echo "🚀 Starting deployment to ${{ inputs.environment }}..."
+          echo "Command: ${{ inputs.deployment-command }}"
+          
+          # Execute the deployment command
+          ${{ inputs.deployment-command }}
+          
+          echo "✅ Deployment command completed"
+
+      - name: Wait for deployment stabilization
+        if: inputs.smoke-test-enabled
+        run: |
+          echo "⏳ Waiting 30 seconds for deployment to stabilize..."
+          sleep 30
+
+      - name: Run smoke tests
+        if: inputs.smoke-test-enabled && inputs.smoke-test-url != ''
+        run: |
+          echo "🧪 Running smoke tests against ${{ inputs.smoke-test-url }}"
+          
+          max_attempts=5
+          attempt=1
+          
+          while [ $attempt -le $max_attempts ]; do
+            echo "Attempt $attempt of $max_attempts..."
+            
+            response=$(curl -s -o /dev/null -w "%{http_code}" "${{ inputs.smoke-test-url }}" || echo "000")
+            
+            if [ "$response" -ge 200 ] && [ "$response" -lt 400 ]; then
+              echo "✅ Smoke test passed! HTTP $response"
+              exit 0
+            fi
+            
+            echo "⚠️ Smoke test failed with HTTP $response"
+            
+            if [ $attempt -lt $max_attempts ]; then
+              echo "Retrying in 10 seconds..."
+              sleep 10
+            fi
+            
+            attempt=$((attempt + 1))
+          done
+          
+          echo "❌ Smoke tests failed after $max_attempts attempts"
+          exit 1
+
+      - name: Generate deployment summary
+        if: always()
+        run: |
+          echo "# Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Details" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment**: ${{ inputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status**: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Triggered by**: ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch**: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          
+          if [ -n "${{ inputs.smoke-test-url }}" ]; then
+            echo "- **URL**: ${{ inputs.smoke-test-url }}" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  notify:
+    name: Send Notifications
+    runs-on: ubuntu-latest
+    needs: deploy
+    if: always() && inputs.slack-webhook-enabled
+    timeout-minutes: 5
+
+    steps:
+      - name: Determine deployment status
+        id: status
+        run: |
+          if [ "${{ needs.deploy.result }}" == "success" ]; then
+            echo "emoji=✅" >> $GITHUB_OUTPUT
+            echo "status=succeeded" >> $GITHUB_OUTPUT
+            echo "color=good" >> $GITHUB_OUTPUT
+          else
+            echo "emoji=❌" >> $GITHUB_OUTPUT
+            echo "status=failed" >> $GITHUB_OUTPUT
+            echo "color=danger" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Send Slack notification
+        uses: slackapi/slack-github-action@v1.25.0
+        if: secrets.slack-webhook-url != ''
+        with:
+          webhook: ${{ secrets.slack-webhook-url }}
+          webhook-type: incoming-webhook
+          payload: |
+            {
+              "text": "${{ steps.status.outputs.emoji }} Deployment to ${{ inputs.environment }} ${{ steps.status.outputs.status }}",
+              "attachments": [
+                {
+                  "color": "${{ steps.status.outputs.color }}",
+                  "fields": [
+                    {
+                      "title": "Environment",
+                      "value": "${{ inputs.environment }}",
+                      "short": true
+                    },
+                    {
+                      "title": "Status",
+                      "value": "${{ steps.status.outputs.status }}",
+                      "short": true
+                    },
+                    {
+                      "title": "Repository",
+                      "value": "${{ github.repository }}",
+                      "short": true
+                    },
+                    {
+                      "title": "Triggered by",
+                      "value": "${{ github.actor }}",
+                      "short": true
+                    },
+                    {
+                      "title": "Branch",
+                      "value": "${{ github.ref_name }}",
+                      "short": true
+                    },
+                    {
+                      "title": "Commit",
+                      "value": "<https://github.com/${{ github.repository }}/commit/${{ github.sha }}|${{ github.sha }}>",
+                      "short": true
+                    }
+                  ]
+                }
+              ]
+            }

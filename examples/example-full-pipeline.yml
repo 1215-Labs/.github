@@ -1,0 +1,149 @@
+# Example Full CI/CD Pipeline
+#
+# This example demonstrates a complete CI/CD pipeline using multiple
+# 1215-Labs reusable workflows to build, test, scan, containerize,
+# and deploy an application.
+#
+# Copy this file to your repository: .github/workflows/pipeline.yml
+
+name: Complete CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main ]
+
+# Cancel in-progress runs of the same workflow
+concurrency:
+  group: pipeline-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Stage 1: Code Quality and Testing
+  ci:
+    name: Build and Test
+    uses: 1215-Labs/.github/.github/workflows/reusable-ci.yml@main
+    with:
+      language: 'nodejs'
+      node-version: '18'
+      run-tests: true
+      run-lint: true
+      working-directory: '.'
+
+  # Stage 2: Security Scanning
+  security:
+    name: Security Scan
+    needs: ci
+    uses: 1215-Labs/.github/.github/workflows/reusable-security-scan.yml@main
+    with:
+      language: 'javascript'
+      severity-threshold: 'high'
+
+  # Stage 3: Build and Push Docker Image
+  docker:
+    name: Build Docker Image
+    needs: [ci, security]
+    # Only build Docker images on main branch or tags
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    uses: 1215-Labs/.github/.github/workflows/reusable-docker-build.yml@main
+    with:
+      image-name: ${{ github.repository }}
+      dockerfile-path: './Dockerfile'
+      registry: 'ghcr.io'
+      context: '.'
+      platforms: 'linux/amd64,linux/arm64'
+    secrets:
+      registry-username: ${{ github.actor }}
+      registry-password: ${{ secrets.GITHUB_TOKEN }}
+
+  # Stage 4: Deploy to Staging
+  deploy-staging:
+    name: Deploy to Staging
+    needs: docker
+    # Only deploy staging from main branch
+    if: github.ref == 'refs/heads/main'
+    uses: 1215-Labs/.github/.github/workflows/reusable-deploy.yml@main
+    with:
+      environment: 'staging'
+      deployment-command: |
+        echo "Deploying to staging..."
+        # Example: kubectl set image deployment/app app=ghcr.io/${{ github.repository }}:${{ github.sha }}
+        # Example: helm upgrade --install app ./charts/app --set image.tag=${{ github.sha }}
+        # Example: aws ecs update-service --cluster staging --service app --force-new-deployment
+      smoke-test-url: 'https://staging.example.com/health'
+      smoke-test-enabled: true
+      slack-webhook-enabled: true
+    secrets:
+      deployment-token: ${{ secrets.STAGING_DEPLOY_TOKEN }}
+      slack-webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  # Stage 5: Deploy to Production
+  deploy-production:
+    name: Deploy to Production
+    needs: docker
+    # Only deploy production from version tags
+    if: startsWith(github.ref, 'refs/tags/v')
+    uses: 1215-Labs/.github/.github/workflows/reusable-deploy.yml@main
+    with:
+      environment: 'production'
+      deployment-command: |
+        echo "Deploying to production..."
+        # Extract version from tag (e.g., v1.2.3 -> 1.2.3)
+        VERSION=${GITHUB_REF#refs/tags/v}
+        echo "Deploying version: $VERSION"
+        # Example deployment commands:
+        # kubectl set image deployment/app app=ghcr.io/${{ github.repository }}:$VERSION
+        # helm upgrade --install app ./charts/app --set image.tag=$VERSION
+        # aws ecs update-service --cluster production --service app --force-new-deployment
+      smoke-test-url: 'https://example.com/health'
+      smoke-test-enabled: true
+      slack-webhook-enabled: true
+    secrets:
+      deployment-token: ${{ secrets.PRODUCTION_DEPLOY_TOKEN }}
+      slack-webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  # Stage 6: Notification (runs on completion)
+  notify:
+    name: Send Notifications
+    needs: [ci, security, docker, deploy-staging, deploy-production]
+    if: always()
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Determine overall status
+        id: status
+        run: |
+          if [ "${{ needs.ci.result }}" != "success" ]; then
+            echo "status=failure" >> $GITHUB_OUTPUT
+          elif [ "${{ needs.security.result }}" != "success" ]; then
+            echo "status=failure" >> $GITHUB_OUTPUT
+          elif [ "${{ needs.docker.result }}" == "failure" ]; then
+            echo "status=failure" >> $GITHUB_OUTPUT
+          elif [ "${{ needs.deploy-staging.result }}" == "failure" ]; then
+            echo "status=failure" >> $GITHUB_OUTPUT
+          elif [ "${{ needs.deploy-production.result }}" == "failure" ]; then
+            echo "status=failure" >> $GITHUB_OUTPUT
+          else
+            echo "status=success" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Send Slack notification
+        if: always()
+        uses: 1215-Labs/.github/.github/actions/notify-slack@main
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          status: ${{ steps.status.outputs.status }}
+          job-name: 'Complete CI/CD Pipeline'
+          include-commit-info: true
+
+# Example required secrets:
+# - STAGING_DEPLOY_TOKEN: Token for staging deployments
+# - PRODUCTION_DEPLOY_TOKEN: Token for production deployments
+# - SLACK_WEBHOOK_URL: Slack webhook for notifications
+#
+# Example required environments (Settings → Environments):
+# - staging: No protection rules needed
+# - production: Add required reviewers, deployment branches, etc.

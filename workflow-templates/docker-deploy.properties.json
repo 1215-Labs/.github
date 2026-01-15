@@ -1,0 +1,14 @@
+{
+  "name": "Docker Build and Deploy Workflow",
+  "description": "Complete CI/CD pipeline that builds Docker images, pushes to GitHub Container Registry, and deploys to staging and production environments with smoke tests.",
+  "iconName": "container",
+  "categories": [
+    "Docker",
+    "Deployment",
+    "CD",
+    "Continuous Deployment"
+  ],
+  "filePatterns": [
+    "Dockerfile$"
+  ]
+}
