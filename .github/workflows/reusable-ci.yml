@@ -99,7 +99,7 @@ jobs:
       # Python setup and workflow
       - name: Setup Python environment
         if: inputs.language == 'python'
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ inputs.python-version }}
           cache: 'pip'
