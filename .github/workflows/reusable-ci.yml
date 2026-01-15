@@ -155,7 +155,7 @@ jobs:
       # Upload coverage reports (works for both Node.js and Python)
       - name: Upload coverage to Codecov
         if: inputs.run-tests
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         continue-on-error: true
         with:
           directory: ${{ inputs.working-directory }}
