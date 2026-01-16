@@ -72,16 +72,26 @@ jobs:
 
       - name: Prepare fix instructions
         run: |
-          # Read the template and replace placeholders
-          # Support both layouts:
-          # - This repo: prompt templates at repo root
-          # - Copied into other repos: templates under .github/
-          TEMPLATE_PATH=".github/issue_fix_prompt.md"
-          if [ ! -f "$TEMPLATE_PATH" ]; then
+          # Try local first (allows customization)
+          if [ -f ".github/issue_fix_prompt.md" ]; then
+            TEMPLATE_PATH=".github/issue_fix_prompt.md"
+            echo "✓ Using local template at .github/issue_fix_prompt.md"
+          elif [ -f "issue_fix_prompt.md" ]; then
             TEMPLATE_PATH="issue_fix_prompt.md"
+            echo "✓ Using local template at issue_fix_prompt.md"
+          else
+            # Fallback to canonical template from source repo
+            echo "📋 No local template found. Fetching canonical template from 1215-Labs/.github..."
+            echo "💡 To customize: copy to your repo at .github/issue_fix_prompt.md"
+            curl -fsSL https://raw.githubusercontent.com/1215-Labs/.github/main/.github/issue_fix_prompt.md \
+              -o /tmp/issue_fix_prompt.md
+            TEMPLATE_PATH="/tmp/issue_fix_prompt.md"
+            echo "✓ Using remote template"
           fi
+
+          # Verify template was loaded successfully
           if [ ! -f "$TEMPLATE_PATH" ]; then
-            echo "❌ Could not find issue fix prompt template at .github/issue_fix_prompt.md or issue_fix_prompt.md"
+            echo "❌ Failed to load template from local or remote source"
             exit 1
           fi
 
