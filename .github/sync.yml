@@ -1,0 +1,16 @@
+group:
+  # Sync all AI workflow wrappers to organization repos
+  - files:
+      - source: wrapper-templates/claude-fix.yml
+        dest: .github/workflows/claude-fix.yml
+      - source: wrapper-templates/claude-review.yml
+        dest: .github/workflows/claude-review.yml
+      - source: wrapper-templates/codex-fix.yml
+        dest: .github/workflows/codex-fix.yml
+      - source: wrapper-templates/codex-review.yml
+        dest: .github/workflows/codex-review.yml
+    repos: |
+      1215-Labs/claude-code-templates
+      1215-Labs/n8n-mcp
+      1215-Labs/ComfyUI-Copilot
+      1215-Labs/oh-my-opencode

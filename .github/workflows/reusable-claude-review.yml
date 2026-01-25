@@ -1,0 +1,87 @@
+name: Reusable Claude Code Review
+
+on:
+  workflow_call:
+    inputs:
+      issue_number:
+        description: 'The issue or PR number'
+        required: true
+        type: number
+      comment_user:
+        description: 'The user who triggered the workflow'
+        required: true
+        type: string
+      repository:
+        description: 'The repository (owner/repo)'
+        required: true
+        type: string
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN:
+        required: true
+
+jobs:
+  claude-review:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      actions: read
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Load review instructions
+        id: load-instructions
+        run: |
+          PR_NUMBER="${{ inputs.issue_number }}"
+
+          # Support both layouts:
+          # - This repo: prompt templates at repo root
+          # - Copied into other repos: templates under .github/
+          TEMPLATE_PATH=".github/pr_review_prompt.md"
+          if [ ! -f "$TEMPLATE_PATH" ]; then
+            TEMPLATE_PATH="pr_review_prompt.md"
+          fi
+          if [ ! -f "$TEMPLATE_PATH" ]; then
+            # Fallback to canonical template from source repo
+            echo "No local template found. Fetching canonical template from 1215-Labs/.github..."
+            curl -fsSL https://raw.githubusercontent.com/1215-Labs/.github/main/.github/pr_review_prompt.md \
+              -o /tmp/pr_review_prompt.md
+            TEMPLATE_PATH="/tmp/pr_review_prompt.md"
+            echo "Using remote template"
+          fi
+
+          if [ ! -f "$TEMPLATE_PATH" ]; then
+            echo "Could not find PR review prompt template"
+            exit 1
+          fi
+
+          # Read the review template
+          INSTRUCTIONS=$(cat "$TEMPLATE_PATH")
+
+          # Use heredoc to preserve multiline content with context prepended
+          echo "CUSTOM_INSTRUCTIONS<<EOF" >> $GITHUB_OUTPUT
+          echo "# GitHub Context" >> $GITHUB_OUTPUT
+          echo "- Repository: ${{ inputs.repository }}" >> $GITHUB_OUTPUT
+          echo "- PR Number: ${PR_NUMBER}" >> $GITHUB_OUTPUT
+          echo "- Triggered by: ${{ inputs.comment_user }}" >> $GITHUB_OUTPUT
+          echo "" >> $GITHUB_OUTPUT
+          echo "$INSTRUCTIONS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Run Claude Code Review
+        id: claude
+        uses: anthropics/claude-code-action@beta
+        timeout-minutes: 15
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          trigger_phrase: "@claude-review"
+          custom_instructions: ${{ steps.load-instructions.outputs.CUSTOM_INSTRUCTIONS }}

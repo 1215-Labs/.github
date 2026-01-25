@@ -1,0 +1,171 @@
+name: Reusable Codex Review
+
+on:
+  workflow_call:
+    inputs:
+      issue_number:
+        description: 'The issue or PR number'
+        required: true
+        type: number
+      comment_user:
+        description: 'The user who triggered the workflow'
+        required: true
+        type: string
+      repository:
+        description: 'The repository (owner/repo)'
+        required: true
+        type: string
+      event_name:
+        description: 'The event name (issue_comment or pull_request_review_comment)'
+        required: true
+        type: string
+      is_pull_request:
+        description: 'Whether the comment is on a PR (vs an issue)'
+        required: true
+        type: boolean
+    secrets:
+      OPENAI_API_KEY:
+        required: true
+
+jobs:
+  codex-review:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      actions: read
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "codex-bot"
+          git config user.email "codex-bot@users.noreply.github.com"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Fetch target details (issue or PR)
+        id: fetch-details
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "${{ inputs.is_pull_request }}" = "true" ]; then
+            echo "Fetching PR #${{ inputs.issue_number }} details + diff..."
+            gh pr view ${{ inputs.issue_number }} --json title,body,comments,files --jq '{title,body,comments: [.comments[] | {author: .author.login, body: .body}], files: [.files[] | {path: .path, additions: .additions, deletions: .deletions}]}' > /tmp/target-details.json
+            gh pr diff ${{ inputs.issue_number }} > /tmp/target-diff.txt
+            echo "target_kind=pr" >> $GITHUB_OUTPUT
+          else
+            echo "Fetching Issue #${{ inputs.issue_number }} details..."
+            gh issue view ${{ inputs.issue_number }} --json title,body,comments --jq '{title,body,comments: [.comments[] | {author: .author.login, body: .body}]}' > /tmp/target-details.json
+            # No diff for issues
+            : > /tmp/target-diff.txt
+            echo "target_kind=issue" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Prepare review instructions
+        run: |
+          # Support both layouts:
+          # - This repo: prompt templates at repo root
+          # - Copied into other repos: templates under .github/
+          TEMPLATE_PATH=".github/pr_review_prompt.md"
+          if [ ! -f "$TEMPLATE_PATH" ]; then
+            TEMPLATE_PATH="pr_review_prompt.md"
+          fi
+          if [ ! -f "$TEMPLATE_PATH" ]; then
+            # Fallback to canonical template from source repo
+            echo "No local template found. Fetching canonical template from 1215-Labs/.github..."
+            curl -fsSL https://raw.githubusercontent.com/1215-Labs/.github/main/.github/pr_review_prompt.md \
+              -o /tmp/pr_review_prompt.md
+            TEMPLATE_PATH="/tmp/pr_review_prompt.md"
+            echo "Using remote template"
+          fi
+
+          if [ ! -f "$TEMPLATE_PATH" ]; then
+            echo "Could not find PR review prompt template"
+            exit 1
+          fi
+
+          # Read the review template
+          INSTRUCTIONS=$(cat "$TEMPLATE_PATH")
+
+          TARGET_DETAILS=$(cat /tmp/target-details.json)
+          TARGET_DIFF=$(cat /tmp/target-diff.txt)
+
+          # Prepend context with full target details (and diff when available)
+          echo "# GitHub Context" > /tmp/codex-review-prompt.md
+          echo "- Repository: ${{ inputs.repository }}" >> /tmp/codex-review-prompt.md
+          if [ "${{ inputs.is_pull_request }}" = "true" ]; then
+            echo "- PR Number: ${{ inputs.issue_number }}" >> /tmp/codex-review-prompt.md
+          else
+            echo "- Issue Number: ${{ inputs.issue_number }}" >> /tmp/codex-review-prompt.md
+          fi
+          echo "- Triggered by: ${{ inputs.comment_user }}" >> /tmp/codex-review-prompt.md
+          echo "" >> /tmp/codex-review-prompt.md
+          if [ "${{ inputs.is_pull_request }}" = "true" ]; then
+            echo "## Pull Request Details" >> /tmp/codex-review-prompt.md
+          else
+            echo "## Issue Details" >> /tmp/codex-review-prompt.md
+          fi
+          echo '```json' >> /tmp/codex-review-prompt.md
+          echo "$TARGET_DETAILS" >> /tmp/codex-review-prompt.md
+          echo '```' >> /tmp/codex-review-prompt.md
+          if [ "${{ inputs.is_pull_request }}" = "true" ]; then
+            echo "" >> /tmp/codex-review-prompt.md
+            echo "## Pull Request Diff" >> /tmp/codex-review-prompt.md
+            echo '```diff' >> /tmp/codex-review-prompt.md
+            echo "$TARGET_DIFF" >> /tmp/codex-review-prompt.md
+            echo '```' >> /tmp/codex-review-prompt.md
+            echo "" >> /tmp/codex-review-prompt.md
+          fi
+          echo "$INSTRUCTIONS" >> /tmp/codex-review-prompt.md
+
+      - name: Run Codex Review
+        id: codex
+        uses: openai/codex-action@v1
+        timeout-minutes: 15
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          prompt-file: /tmp/codex-review-prompt.md
+          output-file: codex-review.md
+          safety-strategy: drop-sudo
+          sandbox: workspace-write
+
+      - name: Post review comment
+        if: success()
+        uses: actions/github-script@v7
+        env:
+          ISSUE_NUMBER: ${{ inputs.issue_number }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const issueNumber = Number(process.env.ISSUE_NUMBER);
+
+            // Read the review output if it exists
+            let reviewBody = '## Code Review by Codex\n\n';
+            try {
+              if (fs.existsSync('codex-review.md')) {
+                reviewBody += fs.readFileSync('codex-review.md', 'utf8');
+              } else {
+                reviewBody += 'Codex completed the review. No issues found or review file not generated.';
+              }
+            } catch (error) {
+              reviewBody += 'Error reading review output.';
+            }
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issueNumber,
+              body: reviewBody
+            });

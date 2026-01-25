@@ -1,0 +1,31 @@
+name: Sync Workflow Wrappers
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'wrapper-templates/**'
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Sync workflow wrappers to target repos
+        uses: BetaHuhn/repo-file-sync-action@v1
+        with:
+          GH_PAT: ${{ secrets.WORKFLOW_SYNC_PAT }}
+          CONFIG_PATH: .github/sync.yml
+          PR_LABELS: automated,workflow-sync
+          COMMIT_PREFIX: "ci: "
+          PR_BODY: |
+            This PR syncs workflow wrapper files from 1215-Labs/.github.
+
+            These thin wrapper files call the reusable workflows in the central .github repo.
+            Any logic changes should be made in the reusable workflows, not here.
+
+            ---
+            *Automated by [repo-file-sync-action](https://github.com/BetaHuhn/repo-file-sync-action)*
