@@ -22,6 +22,9 @@ on:
     secrets:
       OPENAI_API_KEY:
         required: true
+      WORKFLOW_SYNC_PAT:
+        required: false
+        description: 'PAT with workflows permission for pushing changes to workflow files'
 
 jobs:
   codex-fix:
@@ -158,7 +161,11 @@ jobs:
         if: success() && steps.checkout-pr.outputs.is_pr == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PUSH_TOKEN: ${{ secrets.WORKFLOW_SYNC_PAT || secrets.GITHUB_TOKEN }}
         run: |
+          # Configure git to use PAT for push (required for workflow file changes)
+          git remote set-url origin "https://x-access-token:${PUSH_TOKEN}@github.com/${{ inputs.repository }}.git"
+
           # Check if there are changes to commit
           if git diff --quiet && git diff --staged --quiet; then
             echo "No changes to commit"
