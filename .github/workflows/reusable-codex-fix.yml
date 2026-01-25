@@ -163,6 +163,9 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PUSH_TOKEN: ${{ secrets.WORKFLOW_SYNC_PAT || secrets.GITHUB_TOKEN }}
         run: |
+          # Clear the extraheader set by actions/checkout (uses GITHUB_TOKEN, can't push workflow files)
+          git config --local --unset-all http.https://github.com/.extraheader || true
+
           # Configure git to use PAT for push (required for workflow file changes)
           git remote set-url origin "https://x-access-token:${PUSH_TOKEN}@github.com/${{ inputs.repository }}.git"
 
